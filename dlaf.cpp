@@ -154,6 +154,12 @@ public:
         return p.Length() > m_BoundingRadius * 4;
     }
 
+    // PlaceParticle computes the final placement of the particle.
+    Vector PlaceParticle(const Vector &parent, Vector p) const {
+        const Vector v = (p - parent).Normalized();
+        return parent + v * m_ParticleSpacing;
+    }
+
     // AddParticle diffuses one new particle and adds it to the model
     void AddParticle() {
         // compute particle starting location
@@ -168,9 +174,8 @@ public:
 
             // check if close enough to join
             if (d < m_AttractionDistance) {
-                // set the distance between the particle and its parent
-                const Vector v = (p - parent).Normalized();
-                p = parent + v * m_ParticleSpacing;
+                // adjust particle position in relation to its parent
+                p = PlaceParticle(parent, p);
 
                 // add the point
                 Add(p, i);
@@ -190,12 +195,12 @@ public:
     }
 
 private:
-    // m_ParticleSpacing defines the distance between particles that are fixed
-    // in the lattice structure
+    // m_ParticleSpacing defines the distance between particles that are
+    // joined together
     double m_ParticleSpacing;
 
     // m_AttractionDistance defines how close together particles must be in
-    // order to interact
+    // order to join together
     double m_AttractionDistance;
 
     // m_MinMoveDistance defines the minimum distance that a particle will move
