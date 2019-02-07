@@ -154,10 +154,18 @@ public:
         return p.Length() > m_BoundingRadius * 4;
     }
 
+    // ShouldJoin returns true if the point should attach to the specified
+    // parent particle. This is only called when the point is already within
+    // the required attraction distance.
+    bool ShouldJoin(const Vector &p, const int parent) const {
+        return true;
+    }
+
     // PlaceParticle computes the final placement of the particle.
-    Vector PlaceParticle(const Vector &parent, Vector p) const {
-        const Vector v = (p - parent).Normalized();
-        return parent + v * m_ParticleSpacing;
+    Vector PlaceParticle(const Vector &p, const int parent) const {
+        const Vector q = m_Points[parent];
+        const Vector v = (p - q).Normalized();
+        return q + v * m_ParticleSpacing;
     }
 
     // AddParticle diffuses one new particle and adds it to the model
@@ -168,17 +176,16 @@ public:
         // do the random walk
         while (true) {
             // get distance to nearest other particle
-            const int i = Nearest(p);
-            const Vector &parent = m_Points[i];
-            const double d = parent.Distance(p);
+            const int parent = Nearest(p);
+            const double d = p.Distance(m_Points[parent]);
 
             // check if close enough to join
-            if (d < m_AttractionDistance) {
+            if (d < m_AttractionDistance && ShouldJoin(p, parent)) {
                 // adjust particle position in relation to its parent
-                p = PlaceParticle(parent, p);
+                p = PlaceParticle(p, parent);
 
                 // add the point
-                Add(p, i);
+                Add(p, parent);
                 return;
             }
 
@@ -224,6 +231,18 @@ int main() {
 
     // add seed point(s)
     model.Add(Vector());
+
+    // {
+    //     const int n = 3600;
+    //     const double r = 1000;
+    //     for (int i = 0; i < n; i++) {
+    //         const double t = (double)i / n;
+    //         const double a = t * 2 * M_PI;
+    //         const double x = std::cos(a) * r;
+    //         const double y = std::sin(a) * r;
+    //         model.Add(Vector(x, y, 0));
+    //     }
+    // }
 
     // run diffusion-limited aggregation
     for (int i = 0; i < 100000; i++) {
