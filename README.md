@@ -67,3 +67,4 @@ The following hooks allow you to define the algorithm behavior in small, well-de
 | `ShouldReset(p)` | Returns true if the particle has gone too far away and should be reset to a new random starting position. |
 | `ShouldJoin(p, parent)` | Returns true if the point should attach to the specified parent particle. This is only called when the point is already within the required attraction distance. If false is returned, the particle will continue its random walk instead of joining to the other particle. |
 | `PlaceParticle(p, parent)` | Returns the final placement position of the particle. |
+| `MotionVector(p)` | Returns a vector specifying the direction that the particle should move for one iteration. The distance that it will move is determined by the algorithm. |
