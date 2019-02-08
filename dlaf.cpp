@@ -180,6 +180,9 @@ public:
         // compute particle starting location
         Vector p = RandomStartingPosition();
 
+        // track previous position during the walk
+        Vector prev = p;
+
         // do the random walk
         while (true) {
             // get distance to nearest other particle
@@ -187,7 +190,12 @@ public:
             const double d = p.Distance(m_Points[parent]);
 
             // check if close enough to join
-            if (d < m_AttractionDistance && ShouldJoin(p, parent)) {
+            if (d < m_AttractionDistance) {
+                if (!ShouldJoin(p, parent)) {
+                    p = prev;
+                    continue;
+                }
+
                 // adjust particle position in relation to its parent
                 p = PlaceParticle(p, parent);
 
@@ -199,11 +207,13 @@ public:
             // move randomly
             const double m = std::max(
                 m_MinMoveDistance, d - m_AttractionDistance);
+            prev = p;
             p += MotionVector(p).Normalized() * m;
 
             // check if particle is too far away, reset if so
             if (ShouldReset(p)) {
                 p = RandomStartingPosition();
+                prev = p;
             }
         }
     }
@@ -234,7 +244,7 @@ private:
 
 int main() {
     // create the model
-    Model model(1, 3, 0.1);
+    Model model(1, 3, 1);
 
     // add seed point(s)
     model.Add(Vector());
