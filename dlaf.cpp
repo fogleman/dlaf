@@ -168,6 +168,13 @@ public:
         return q + v * m_ParticleSpacing;
     }
 
+    // MotionVector returns a vector specifying the direction that the
+    // particle should move for one iteration. The distance that it will move
+    // is determined by the algorithm.
+    Vector MotionVector(const Vector &p) const {
+        return RandomInUnitSphere();
+    }
+
     // AddParticle diffuses one new particle and adds it to the model
     void AddParticle() {
         // compute particle starting location
@@ -192,7 +199,7 @@ public:
             // move randomly
             const double m = std::max(
                 m_MinMoveDistance, d - m_AttractionDistance);
-            p += RandomInUnitSphere().Normalized() * m;
+            p += MotionVector(p).Normalized() * m;
 
             // check if particle is too far away, reset if so
             if (ShouldReset(p)) {
