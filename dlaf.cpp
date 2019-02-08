@@ -88,6 +88,11 @@ private:
     double m_Z;
 };
 
+// Lerp linearly interpolates between the two points by distance.
+Vector Lerp(const Vector &a, const Vector &b, const double d) {
+    return a + (b - a).Normalized() * d;
+}
+
 // Random returns a uniformly distributed random number between lo and hi
 double Random(const double lo = 0, const double hi = 1) {
     static thread_local std::mt19937 gen(
@@ -117,6 +122,7 @@ public:
         m_ParticleSpacing(particleSpacing),
         m_AttractionDistance(attractionDistance),
         m_MinMoveDistance(minMoveDistance),
+        m_Stubbornness(64),
         m_BoundingRadius(0) {}
 
     // Add adds a new particle with the specified parent particle
@@ -124,6 +130,7 @@ public:
         const int id = m_Points.size();
         m_Index.insert(std::make_pair(p.ToBoost(), id));
         m_Points.push_back(p);
+        m_JoinAttempts.push_back(0);
         m_BoundingRadius = std::max(
             m_BoundingRadius, p.Length() + m_AttractionDistance);
         std::cout
@@ -144,28 +151,26 @@ public:
 
     // RandomStartingPosition returns a random point to start a new particle
     Vector RandomStartingPosition() const {
-        const double d = m_BoundingRadius * 2;
+        const double d = m_BoundingRadius;
         return RandomInUnitSphere().Normalized() * d;
     }
 
     // ShouldReset returns true if the particle has gone too far away and
     // should be reset to a new random starting position
     bool ShouldReset(const Vector &p) const {
-        return p.Length() > m_BoundingRadius * 4;
+        return p.Length() > m_BoundingRadius * 2;
     }
 
     // ShouldJoin returns true if the point should attach to the specified
     // parent particle. This is only called when the point is already within
     // the required attraction distance.
-    bool ShouldJoin(const Vector &p, const int parent) const {
-        return true;
+    bool ShouldJoin(const Vector &p, const int parent) {
+        return ++m_JoinAttempts[parent] > m_Stubbornness;
     }
 
     // PlaceParticle computes the final placement of the particle.
     Vector PlaceParticle(const Vector &p, const int parent) const {
-        const Vector q = m_Points[parent];
-        const Vector v = (p - q).Normalized();
-        return q + v * m_ParticleSpacing;
+        return Lerp(m_Points[parent], p, m_ParticleSpacing);
     }
 
     // MotionVector returns a vector specifying the direction that the
@@ -180,9 +185,6 @@ public:
         // compute particle starting location
         Vector p = RandomStartingPosition();
 
-        // track previous position during the walk
-        Vector prev = p;
-
         // do the random walk
         while (true) {
             // get distance to nearest other particle
@@ -192,7 +194,9 @@ public:
             // check if close enough to join
             if (d < m_AttractionDistance) {
                 if (!ShouldJoin(p, parent)) {
-                    p = prev;
+                    // push particle away a bit
+                    p = Lerp(m_Points[parent], p,
+                        m_AttractionDistance + m_MinMoveDistance);
                     continue;
                 }
 
@@ -207,13 +211,11 @@ public:
             // move randomly
             const double m = std::max(
                 m_MinMoveDistance, d - m_AttractionDistance);
-            prev = p;
             p += MotionVector(p).Normalized() * m;
 
             // check if particle is too far away, reset if so
             if (ShouldReset(p)) {
                 p = RandomStartingPosition();
-                prev = p;
             }
         }
     }
@@ -231,12 +233,16 @@ private:
     // during its random walk
     double m_MinMoveDistance;
 
+    int m_Stubbornness;
+
     // m_BoundingRadius defines the radius of the bounding sphere that bounds
     // all of the particles
     double m_BoundingRadius;
 
     // m_Points stores a list of the particle positions
     std::vector<Vector> m_Points;
+
+    std::vector<int> m_JoinAttempts;
 
     // m_Index is the spatial index used to accelerate nearest neighbor queries
     Index m_Index;
