@@ -46,3 +46,24 @@ Rendering is left to you. This code just gives you the location of the points an
 But here is an example rendering in 2D with one million particles:
 
 ![Example](https://i.imgur.com/Ma1hv3z.png)
+
+### Hooks & Parameters
+
+The code implements a standard diffusion-limited aggregation algorithm. But there are several parameters and code hooks that let you tweak its behavior.
+
+The following parameters are specified when constructing a new `Model` instance.
+
+| Parameter | Description |
+| --- | --- |
+| `AttractionDistance` | Defines how close together particles must be in order to join together. |
+| `ParticleSpacing` | Defines the distance between particles when they become joined together. |
+| `MinMoveDistance` | Defines the minimum distance that a particle will move in an iteration during its random walk. |
+
+The following hooks allow you to define the algorithm behavior in small, well-defined functions.
+
+| Hook | Description |
+| --- | --- |
+| `RandomStartingPosition()` | Returns a starting position for a new particle to begin its random walk. |
+| `ShouldReset(p)` | Returns true if the particle has gone too far away and should be reset to a new random starting position. |
+| `ShouldJoin(p, parent)` | Returns true if the point should attach to the specified parent particle. This is only called when the point is already within the required attraction distance. If false is returned, the particle will continue its random walk instead of joining to the other particle. |
+| `PlaceParticle(p, parent)` | Returns the final placement position of the particle. |
