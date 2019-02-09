@@ -8,14 +8,21 @@
 // number of dimensions (must be 2 or 3)
 const int D = 2;
 
+// default parameters (documented below)
+const double DefaultParticleSpacing = 1;
+const double DefaultAttractionDistance = 3;
+const double DefaultMinMoveDistance = 1;
+const int DefaultStubbornness = 0;
+const double DefaultStickiness = 1;
+
 // boost is used for its spatial index
-typedef boost::geometry::model::point<
-    double, D, boost::geometry::cs::cartesian> BoostPoint;
+using BoostPoint = boost::geometry::model::point<
+    double, D, boost::geometry::cs::cartesian>;
 
-typedef std::pair<BoostPoint, int> IndexValue;
+using IndexValue = std::pair<BoostPoint, int>;
 
-typedef boost::geometry::index::rtree<
-    IndexValue, boost::geometry::index::linear<4>> Index;
+using Index = boost::geometry::index::rtree<
+    IndexValue, boost::geometry::index::linear<4>>;
 
 // Vector represents a point or a vector
 class Vector {
@@ -88,7 +95,7 @@ private:
     double m_Z;
 };
 
-// Lerp linearly interpolates between the two points by distance.
+// Lerp linearly interpolates from a to b by distance.
 Vector Lerp(const Vector &a, const Vector &b, const double d) {
     return a + (b - a).Normalized() * d;
 }
@@ -115,15 +122,36 @@ Vector RandomInUnitSphere() {
     }
 }
 
-// Model holds all of the particles
+// Model holds all of the particles and defines their behavior.
 class Model {
 public:
-    Model(double particleSpacing, double attractionDistance, double minMoveDistance) :
-        m_ParticleSpacing(particleSpacing),
-        m_AttractionDistance(attractionDistance),
-        m_MinMoveDistance(minMoveDistance),
-        m_Stubbornness(64),
+    Model() :
+        m_ParticleSpacing(DefaultParticleSpacing),
+        m_AttractionDistance(DefaultAttractionDistance),
+        m_MinMoveDistance(DefaultMinMoveDistance),
+        m_Stubbornness(DefaultStubbornness),
+        m_Stickiness(DefaultStickiness),
         m_BoundingRadius(0) {}
+
+    void SetParticleSpacing(const double a) {
+        m_ParticleSpacing = a;
+    }
+
+    void SetAttractionDistance(const double a) {
+        m_AttractionDistance = a;
+    }
+
+    void SetMinMoveDistance(const double a) {
+        m_MinMoveDistance = a;
+    }
+
+    void SetStubbornness(const int a) {
+        m_Stubbornness = a;
+    }
+
+    void SetStickiness(const double a) {
+        m_Stickiness = a;
+    }
 
     // Add adds a new particle with the specified parent particle
     void Add(const Vector &p, const int parent = -1) {
@@ -165,7 +193,11 @@ public:
     // parent particle. This is only called when the point is already within
     // the required attraction distance.
     bool ShouldJoin(const Vector &p, const int parent) {
-        return ++m_JoinAttempts[parent] > m_Stubbornness;
+        m_JoinAttempts[parent]++;
+        if (m_JoinAttempts[parent] < m_Stubbornness) {
+            return false;
+        }
+        return Random() <= m_Stickiness;
     }
 
     // PlaceParticle computes the final placement of the particle.
@@ -233,15 +265,23 @@ private:
     // during its random walk
     double m_MinMoveDistance;
 
+    // m_Stubbornness defines how many interactions must occur before a
+    // particle will allow another particle to join to it.
     int m_Stubbornness;
+
+    // m_Stickiness defines the probability that a particle will allow another
+    // particle to join to it.
+    double m_Stickiness;
 
     // m_BoundingRadius defines the radius of the bounding sphere that bounds
     // all of the particles
     double m_BoundingRadius;
 
-    // m_Points stores a list of the particle positions
+    // m_Points stores the final particle positions
     std::vector<Vector> m_Points;
 
+    // m_JoinAttempts tracks how many times other particles have attempted to
+    // join with each finalized particle
     std::vector<int> m_JoinAttempts;
 
     // m_Index is the spatial index used to accelerate nearest neighbor queries
@@ -250,7 +290,7 @@ private:
 
 int main() {
     // create the model
-    Model model(1, 3, 1);
+    Model model;
 
     // add seed point(s)
     model.Add(Vector());
