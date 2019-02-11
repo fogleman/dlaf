@@ -51,13 +51,15 @@ But here is an example rendering in 2D with one million particles:
 
 The code implements a standard diffusion-limited aggregation algorithm. But there are several parameters and code hooks that let you tweak its behavior.
 
-The following parameters are specified when constructing a new `Model` instance.
+The following parameters can be set on a `Model` instance.
 
 | Parameter | Description |
 | --- | --- |
 | `AttractionDistance` | Defines how close together particles must be in order to join together. |
 | `ParticleSpacing` | Defines the distance between particles when they become joined together. |
 | `MinMoveDistance` | Defines the minimum distance that a particle will move in an iteration during its random walk. |
+| `Stubbornness` | Defines how many join attempts must occur before a particle will allow another particle to join to it. |
+| `Stickiness` | Defines the probability that a particle will allow another particle to join to it. |
 
 The following hooks allow you to define the algorithm behavior in small, well-defined functions.
 
