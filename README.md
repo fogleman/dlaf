@@ -40,13 +40,6 @@ $ head output.csv
 9,5,0.832028,3.28017,0
 ```
 
-### Rendering
-
-Rendering is left to you. This code just gives you the location of the points and their hierarchy.
-But here is an example rendering in 2D with one million particles:
-
-![Example](https://i.imgur.com/Ma1hv3z.png)
-
 ### Hooks & Parameters
 
 The code implements a standard diffusion-limited aggregation algorithm. But there are several parameters and code hooks that let you tweak its behavior.
@@ -70,3 +63,14 @@ The following hooks allow you to define the algorithm behavior in small, well-de
 | `ShouldJoin(p, parent)` | Returns true if the point should attach to the specified parent particle. This is only called when the point is already within the required attraction distance. If false is returned, the particle will continue its random walk instead of joining to the other particle. |
 | `PlaceParticle(p, parent)` | Returns the final placement position of the particle. |
 | `MotionVector(p)` | Returns a vector specifying the direction that the particle should move for one iteration. The distance that it will move is determined by the algorithm. |
+
+### Rendering
+
+Rendering is left to you. This code just gives you the location of the points and their hierarchy.
+But here is an example rendering in 2D with one million particles:
+
+![Example](https://i.imgur.com/Ma1hv3z.png)
+
+And here is a 3D example with 10 million particles. This image was ray traced in about 10 hours at 4096x4096px with 2048 samples per pixel. [Full resolution here.](https://www.michaelfogleman.com/static/dlaf-3d-10m-2048spp-4096px.png)
+
+![Example](https://www.michaelfogleman.com/static/dlaf-3d-10m-2048spp-1600px.png)
