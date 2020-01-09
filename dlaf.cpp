@@ -24,13 +24,14 @@ const double DefaultStickiness = 1;
 
 // boost is used for its spatial index
 using BoostPoint = boost::geometry::model::point<
-    double, D, boost::geometry::cs::cartesian>;
+    float, D, boost::geometry::cs::cartesian>;
 
 using IndexValue = std::pair<BoostPoint, int>;
 
 using Index = boost::geometry::index::rtree<
-    IndexValue, boost::geometry::index::rstar<64>>;
+    IndexValue, boost::geometry::index::rstar<32>>;
 
+// Record is used to write the binary file format
 typedef struct {
     uint32_t ParentID;
     float X;
