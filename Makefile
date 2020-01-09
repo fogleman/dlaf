@@ -1,6 +1,6 @@
 CC = g++
 TARGET = dlaf
-COMPILE_FLAGS = -std=c++14 -flto -O3 -Wall -Wextra -pedantic -Wno-unused-parameter -march=native
+COMPILE_FLAGS = -std=c++14 -DNDEBUG -flto -O3 -Wall -Wextra -pedantic -Wno-unused-parameter -march=native -lboost_thread-mt
 
 all: $(TARGET)
 

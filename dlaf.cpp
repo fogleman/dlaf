@@ -1,12 +1,19 @@
 #include <boost/function_output_iterator.hpp>
 #include <boost/geometry/geometry.hpp>
+#include <boost/thread.hpp>
+#include <boost/thread/barrier.hpp>
+#include <boost/thread/mutex.hpp>
 #include <chrono>
+#include <fstream>
 #include <iostream>
 #include <random>
 #include <vector>
 
 // number of dimensions (must be 2 or 3)
-const int D = 2;
+const int D = 3;
+
+// number of worker threads
+const int NumThreads = 16;
 
 // default parameters (documented below)
 const double DefaultParticleSpacing = 1;
@@ -22,7 +29,14 @@ using BoostPoint = boost::geometry::model::point<
 using IndexValue = std::pair<BoostPoint, int>;
 
 using Index = boost::geometry::index::rtree<
-    IndexValue, boost::geometry::index::linear<4>>;
+    IndexValue, boost::geometry::index::rstar<16>>;
+
+typedef struct {
+    uint32_t ParentID;
+    float X;
+    float Y;
+    float Z;
+} Record;
 
 // Vector represents a point or a vector
 class Vector {
@@ -161,9 +175,13 @@ public:
         m_JoinAttempts.push_back(0);
         m_BoundingRadius = std::max(
             m_BoundingRadius, p.Length() + m_AttractionDistance);
-        std::cout
-            << id << "," << parent << ","
-            << p.X() << "," << p.Y() << "," << p.Z() << std::endl;
+        Record record = {
+            static_cast<uint32_t>(parent),
+            static_cast<float>(p.X()),
+            static_cast<float>(p.Y()),
+            static_cast<float>(p.Z()),
+        };
+        fwrite(&record, sizeof(Record), 1, stdout);
     }
 
     // Nearest returns the index of the particle nearest the specified point
@@ -212,8 +230,8 @@ public:
         return RandomInUnitSphere();
     }
 
-    // AddParticle diffuses one new particle and adds it to the model
-    void AddParticle() {
+    // Walk diffuses one new particle
+    std::pair<Vector, int> Walk() {
         // compute particle starting location
         Vector p = RandomStartingPosition();
 
@@ -235,9 +253,8 @@ public:
                 // adjust particle position in relation to its parent
                 p = PlaceParticle(p, parent);
 
-                // add the point
-                Add(p, parent);
-                return;
+                // return the new particle position and its parent
+                return std::make_pair(p, parent);
             }
 
             // move randomly
@@ -249,6 +266,51 @@ public:
             if (ShouldReset(p)) {
                 p = RandomStartingPosition();
             }
+        }
+    }
+
+    void RunForever(const int numThreads) {
+        boost::barrier barrier1(numThreads + 1);
+        boost::barrier barrier2(numThreads + 1);
+        boost::mutex mutex;
+
+        std::vector<std::pair<Vector, int>> items;
+        items.reserve(numThreads);
+
+        const auto worker = [&]() {
+            while (1) {
+                barrier1.wait();
+                const auto item = Walk();
+                mutex.lock();
+                items.push_back(item);
+                mutex.unlock();
+                barrier2.wait();
+            }
+        };
+
+        std::vector<boost::thread> threads;
+        for (int i = 0; i < numThreads; i++) {
+            threads.emplace_back(worker);
+        }
+
+        while (1) {
+            barrier1.wait();
+            barrier2.wait();
+            for (int i = 0; i < numThreads; i++) {
+                bool ok = true;
+                for (int j = 0; j < i; j++) {
+                    const double d = items[i].first.Distance(items[j].first);
+                    if (d < m_AttractionDistance * 3) {
+                        ok = false;
+                        break;
+                    }
+                }
+                if (!ok) {
+                    continue;
+                }
+                Add(items[i].first, items[i].second);
+            }
+            items.clear();
         }
     }
 
@@ -293,24 +355,22 @@ int main() {
     Model model;
 
     // add seed point(s)
-    model.Add(Vector());
-
-    // {
-    //     const int n = 3600;
-    //     const double r = 1000;
-    //     for (int i = 0; i < n; i++) {
-    //         const double t = (double)i / n;
-    //         const double a = t * 2 * M_PI;
-    //         const double x = std::cos(a) * r;
-    //         const double y = std::sin(a) * r;
-    //         model.Add(Vector(x, y, 0));
-    //     }
-    // }
-
-    // run diffusion-limited aggregation
-    for (int i = 0; i < 100000; i++) {
-        model.AddParticle();
+    int count = 0;
+    while (1) {
+        Record r;
+        const int n = fread(&r, sizeof(Record), 1, stdin);
+        if (n == 0) {
+            break;
+        }
+        model.Add(Vector(r.X, r.Y, r.Z), r.ParentID);
+        count++;
     }
+
+    if (count == 0) {
+        model.Add(Vector());
+    }
+
+    model.RunForever(NumThreads);
 
     return 0;
 }
