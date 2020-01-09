@@ -14,6 +14,7 @@ const int D = 3;
 
 // number of worker threads
 const int NumThreads = 16;
+const int BatchSize = 128;
 
 // default parameters (documented below)
 const double DefaultParticleSpacing = 1;
@@ -79,6 +80,13 @@ public:
         const double dy = m_Y - v.m_Y;
         const double dz = m_Z - v.m_Z;
         return std::sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    double DistanceSquared(const Vector &v) const {
+        const double dx = m_X - v.m_X;
+        const double dy = m_Y - v.m_Y;
+        const double dz = m_Z - v.m_Z;
+        return dx * dx + dy * dy + dz * dz;
     }
 
     Vector Normalized() const {
@@ -269,21 +277,25 @@ public:
         }
     }
 
-    void RunForever(const int numThreads) {
+    void RunForever(const int numThreads, const int batchSize) {
         boost::barrier barrier1(numThreads + 1);
         boost::barrier barrier2(numThreads + 1);
         boost::mutex mutex;
 
         std::vector<std::pair<Vector, int>> items;
-        items.reserve(numThreads);
+        const double threshold = std::pow(m_AttractionDistance * 3, 2);
 
         const auto worker = [&]() {
             while (1) {
                 barrier1.wait();
-                const auto item = Walk();
-                mutex.lock();
-                items.push_back(item);
-                mutex.unlock();
+                bool done = false;
+                while (!done) {
+                    const auto item = Walk();
+                    mutex.lock();
+                    items.push_back(item);
+                    done = items.size() >= batchSize;
+                    mutex.unlock();
+                }
                 barrier2.wait();
             }
         };
@@ -296,19 +308,18 @@ public:
         while (1) {
             barrier1.wait();
             barrier2.wait();
-            for (int i = 0; i < numThreads; i++) {
+            for (int i = 0; i < items.size(); i++) {
                 bool ok = true;
                 for (int j = 0; j < i; j++) {
-                    const double d = items[i].first.Distance(items[j].first);
-                    if (d < m_AttractionDistance * 3) {
+                    const double d2 = items[i].first.DistanceSquared(items[j].first);
+                    if (d2 < threshold) {
                         ok = false;
                         break;
                     }
                 }
-                if (!ok) {
-                    continue;
+                if (ok) {
+                    Add(items[i].first, items[i].second);
                 }
-                Add(items[i].first, items[i].second);
             }
             items.clear();
         }
@@ -370,7 +381,7 @@ int main() {
         model.Add(Vector());
     }
 
-    model.RunForever(NumThreads);
+    model.RunForever(NumThreads, BatchSize);
 
     return 0;
 }
