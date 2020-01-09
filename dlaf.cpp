@@ -20,7 +20,6 @@ const int BatchSize = 128;
 const double DefaultParticleSpacing = 1;
 const double DefaultAttractionDistance = 3;
 const double DefaultMinMoveDistance = 1;
-const int DefaultStubbornness = 0;
 const double DefaultStickiness = 1;
 
 // boost is used for its spatial index
@@ -30,7 +29,7 @@ using BoostPoint = boost::geometry::model::point<
 using IndexValue = std::pair<BoostPoint, int>;
 
 using Index = boost::geometry::index::rtree<
-    IndexValue, boost::geometry::index::rstar<16>>;
+    IndexValue, boost::geometry::index::rstar<64>>;
 
 typedef struct {
     uint32_t ParentID;
@@ -50,6 +49,9 @@ public:
 
     Vector(double x, double y, double z) :
         m_X(x), m_Y(y), m_Z(z) {}
+
+    Vector(BoostPoint p) :
+        m_X(p.get<0>()), m_Y(p.get<1>()), m_Z(p.get<2>()) {}
 
     double X() const {
         return m_X;
@@ -151,7 +153,6 @@ public:
         m_ParticleSpacing(DefaultParticleSpacing),
         m_AttractionDistance(DefaultAttractionDistance),
         m_MinMoveDistance(DefaultMinMoveDistance),
-        m_Stubbornness(DefaultStubbornness),
         m_Stickiness(DefaultStickiness),
         m_BoundingRadius(0) {}
 
@@ -167,20 +168,14 @@ public:
         m_MinMoveDistance = a;
     }
 
-    void SetStubbornness(const int a) {
-        m_Stubbornness = a;
-    }
-
     void SetStickiness(const double a) {
         m_Stickiness = a;
     }
 
     // Add adds a new particle with the specified parent particle
     void Add(const Vector &p, const int parent = -1) {
-        const int id = m_Points.size();
+        const int id = m_Index.size();
         m_Index.insert(std::make_pair(p.ToBoost(), id));
-        m_Points.push_back(p);
-        m_JoinAttempts.push_back(0);
         m_BoundingRadius = std::max(
             m_BoundingRadius, p.Length() + m_AttractionDistance);
         Record record = {
@@ -192,13 +187,13 @@ public:
         fwrite(&record, sizeof(Record), 1, stdout);
     }
 
-    // Nearest returns the index of the particle nearest the specified point
-    int Nearest(const Vector &point) const {
-        int result = -1;
+    // Nearest returns the particle nearest the specified point
+    IndexValue Nearest(const Vector &point) const {
+        IndexValue result;
         m_Index.query(
             boost::geometry::index::nearest(point.ToBoost(), 1),
             boost::make_function_output_iterator([&result](const auto &value) {
-                result = value.second;
+                result = value;
             }));
         return result;
     }
@@ -218,17 +213,13 @@ public:
     // ShouldJoin returns true if the point should attach to the specified
     // parent particle. This is only called when the point is already within
     // the required attraction distance.
-    bool ShouldJoin(const Vector &p, const int parent) {
-        m_JoinAttempts[parent]++;
-        if (m_JoinAttempts[parent] < m_Stubbornness) {
-            return false;
-        }
+    bool ShouldJoin(const Vector &p, const IndexValue &parent) {
         return Random() <= m_Stickiness;
     }
 
     // PlaceParticle computes the final placement of the particle.
-    Vector PlaceParticle(const Vector &p, const int parent) const {
-        return Lerp(m_Points[parent], p, m_ParticleSpacing);
+    Vector PlaceParticle(const Vector &p, const Vector &parent) const {
+        return Lerp(parent, p, m_ParticleSpacing);
     }
 
     // MotionVector returns a vector specifying the direction that the
@@ -246,23 +237,24 @@ public:
         // do the random walk
         while (true) {
             // get distance to nearest other particle
-            const int parent = Nearest(p);
-            const double d = p.Distance(m_Points[parent]);
+            const IndexValue parent = Nearest(p);
+            const Vector parentPoint(parent.first);
+            const double d = p.Distance(parentPoint);
 
             // check if close enough to join
             if (d < m_AttractionDistance) {
                 if (!ShouldJoin(p, parent)) {
                     // push particle away a bit
-                    p = Lerp(m_Points[parent], p,
+                    p = Lerp(parentPoint, p,
                         m_AttractionDistance + m_MinMoveDistance);
                     continue;
                 }
 
                 // adjust particle position in relation to its parent
-                p = PlaceParticle(p, parent);
+                p = PlaceParticle(p, parentPoint);
 
                 // return the new particle position and its parent
-                return std::make_pair(p, parent);
+                return std::make_pair(p, parent.second);
             }
 
             // move randomly
@@ -283,7 +275,7 @@ public:
         boost::mutex mutex;
 
         std::vector<std::pair<Vector, int>> items;
-        const double threshold = std::pow(m_AttractionDistance * 3, 2);
+        const double threshold = std::pow(m_AttractionDistance * 5, 2);
 
         const auto worker = [&]() {
             while (1) {
@@ -338,10 +330,6 @@ private:
     // during its random walk
     double m_MinMoveDistance;
 
-    // m_Stubbornness defines how many interactions must occur before a
-    // particle will allow another particle to join to it.
-    int m_Stubbornness;
-
     // m_Stickiness defines the probability that a particle will allow another
     // particle to join to it.
     double m_Stickiness;
@@ -349,13 +337,6 @@ private:
     // m_BoundingRadius defines the radius of the bounding sphere that bounds
     // all of the particles
     double m_BoundingRadius;
-
-    // m_Points stores the final particle positions
-    std::vector<Vector> m_Points;
-
-    // m_JoinAttempts tracks how many times other particles have attempted to
-    // join with each finalized particle
-    std::vector<int> m_JoinAttempts;
 
     // m_Index is the spatial index used to accelerate nearest neighbor queries
     Index m_Index;
